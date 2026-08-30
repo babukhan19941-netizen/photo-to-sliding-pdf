@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photo to Sliding PDF</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(135deg, #1f1147, #3d1a63);
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 10px 0 4px;
+    text-align: center;
+  }
+  p.sub {
+    font-size: 13px;
+    color: #d3c6f0;
+    margin: 0 0 16px;
+    text-align: center;
+  }
+  .upload-box {
+    width: 100%;
+    max-width: 420px;
+    border: 2px dashed #a385e0;
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+    background: rgba(255,255,255,0.05);
+    cursor: pointer;
+  }
+  .upload-box input { display: none; }
+  .upload-btn {
+    background: #7c3aed;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .count {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #cbb8f0;
+  }
+  .slider-wrap {
+    width: 100%;
+    max-width: 420px;
+    margin-top: 20px;
+    display: none;
+  }
+  .slider-viewport {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3/4;
+    background: #000;
+    border-radius: 14px;
+    overflow: hidden;
+    touch-action: pan-y;
+  }
+  .slide {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s ease;
+  }
+  .slide img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .nav-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+  }
+  .nav-btn {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: white;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 20px;
+    cursor: pointer;
+  }
+  .nav-btn:disabled {
+    opacity: 0.3;
+  }
+  .page-indicator {
+    font-size: 14px;
+    color: #e0d4ff;
+  }
+  .thumbs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    margin-top: 14px;
+    padding-bottom: 6px;
+  }
+  .thumb {
+    flex: 0 0 auto;
+    width: 54px;
+    height: 70px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 2px solid transparent;
+    opacity: 0.6;
+    cursor: pointer;
+  }
+  .thumb.active {
+    border-color: #a385e0;
+    opacity: 1;
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .actions {
+    width: 100%;
+    max-width: 420px;
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+  }
+  .pdf-btn, .reset-btn {
+    flex: 1;
+    padding: 14px;
+    border-radius: 12px;
+    border: none;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .pdf-btn {
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    color: white;
+  }
+  .pdf-btn:disabled {
+    opacity: 0.4;
+  }
+  .reset-btn {
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+  }
+  .status {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #cbb8f0;
+    text-align: center;
+    min-height: 18px;
+  }
+</style>
+</head>
+<body>
+
+<h1>📸 Photo → Sliding PDF</h1>
+<p class="sub">Multiple photos select karo, slide karke preview dekho, phir PDF banao</p>
+
+<label class="upload-box" id="uploadBox">
+  <div class="upload-btn">📁 Photos Select Karo</div>
+  <div class="count" id="countText">Koi photo select nahi hui</div>
+  <input type="file" id="fileInput" accept="image/*" multiple>
+</label>
+
+<div class="slider-wrap" id="sliderWrap">
+  <div class="slider-viewport" id="viewport"></div>
+
+  <div class="nav-row">
+    <button class="nav-btn" id="prevBtn">‹</button>
+    <span class="page-indicator" id="pageIndicator">1 / 1</span>
+    <button class="nav-btn" id="nextBtn">›</button>
+  </div>
+
+  <div class="thumbs" id="thumbs"></div>
+
+  <div class="actions">
+    <button class="reset-btn" id="resetBtn">🔄 Reset</button>
+    <button class="pdf-btn" id="pdfBtn">⬇️ PDF Banao & Download</button>
+  </div>
+
+  <div class="status" id="status"></div>
+</div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const countText = document.getElementById('countText');
+const sliderWrap = document.getElementById('sliderWrap');
+const viewport = document.getElementById('viewport');
+const thumbsEl = document.getElementById('thumbs');
+const pageIndicator = document.getElementById('pageIndicator');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const pdfBtn = document.getElementById('pdfBtn');
+const resetBtn = document.getElementById('resetBtn');
+const statusEl = document.getElementById('status');
+
+let images = []; // {dataUrl, name}
+let current = 0;
+
+fileInput.addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
+
+  images = [];
+  countText.textContent = `${files.length} photo(s) load ho rahi hain...`;
+
+  for (const file of files) {
+    const dataUrl = await readFileAsDataURL(file);
+    images.push({ dataUrl, name: file.name });
+  }
+
+  current = 0;
+  countText.textContent = `${images.length} photo(s) select hui`;
+  buildSlider();
+  sliderWrap.style.display = 'block';
+});
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function buildSlider() {
+  viewport.innerHTML = '';
+  thumbsEl.innerHTML = '';
+
+  images.forEach((img, i) => {
+    const slide = document.createElement('div');
+    slide.className = 'slide';
+    slide.dataset.index = i;
+    const imageEl = document.createElement('img');
+    imageEl.src = img.dataUrl;
+    slide.appendChild(imageEl);
+    viewport.appendChild(slide);
+
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    thumb.dataset.index = i;
+    const tImg = document.createElement('img');
+    tImg.src = img.dataUrl;
+    thumb.appendChild(tImg);
+    thumb.addEventListener('click', () => { current = i; render(); });
+    thumbsEl.appendChild(thumb);
+  });
+
+  // swipe support
+  let touchStartX = 0;
+  viewport.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+  });
+  viewport.addEventListener('touchend', (e) => {
+    const diff = e.changedTouches[0].clientX - touchStartX;
+    if (diff > 50) goPrev();
+    else if (diff < -50) goNext();
+  });
+
+  render();
+}
+
+function render() {
+  const slides = viewport.querySelectorAll('.slide');
+  slides.forEach((slide, i) => {
+    const offset = (i - current) * 100;
+    slide.style.transform = `translateX(${offset}%)`;
+  });
+
+  const thumbs = thumbsEl.querySelectorAll('.thumb');
+  thumbs.forEach((t, i) => t.classList.toggle('active', i === current));
+
+  pageIndicator.textContent = `${current + 1} / ${images.length}`;
+  prevBtn.disabled = current === 0;
+  nextBtn.disabled = current === images.length - 1;
+
+  const activeThumb = thumbsEl.querySelector('.thumb.active');
+  if (activeThumb) activeThumb.scrollIntoView({ inline: 'center', behavior: 'smooth' });
+}
+
+function goPrev() { if (current > 0) { current--; render(); } }
+function goNext() { if (current < images.length - 1) { current++; render(); } }
+
+prevBtn.addEventListener('click', goPrev);
+nextBtn.addEventListener('click', goNext);
+
+resetBtn.addEventListener('click', () => {
+  images = [];
+  current = 0;
+  fileInput.value = '';
+  countText.textContent = 'Koi photo select nahi hui';
+  sliderWrap.style.display = 'none';
+  statusEl.textContent = '';
+});
+
+pdfBtn.addEventListener('click', async () => {
+  if (!images.length) return;
+  statusEl.textContent = 'PDF ban rahi hai, thoda wait karo...';
+  pdfBtn.disabled = true;
+
+  try {
+    const { jsPDF } = window.jspdf;
+    let pdf = null;
+
+    for (let i = 0; i < images.length; i++) {
+      const dims = await getImageDimensions(images[i].dataUrl);
+      const isLandscape = dims.width > dims.height;
+      const orientation = isLandscape ? 'l' : 'p';
+
+      if (!pdf) {
+        pdf = new jsPDF({ orientation, unit: 'px', format: [dims.width, dims.height] });
+      } else {
+        pdf.addPage([dims.width, dims.height], orientation);
+      }
+
+      pdf.addImage(images[i].dataUrl, 'JPEG', 0, 0, dims.width, dims.height);
+      statusEl.textContent = `Page ${i + 1} / ${images.length} ready...`;
+    }
+
+    pdf.save('photos.pdf');
+    statusEl.textContent = '✅ PDF download ho gayi!';
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = '❌ Kuch galat ho gaya: ' + err.message;
+  } finally {
+    pdfBtn.disabled = false;
+  }
+});
+
+function getImageDimensions(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.width, height: img.height });
+    img.src = dataUrl;
+  });
+}
+</script>
+
+</body>
+</html>
